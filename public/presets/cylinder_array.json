@@ -1,0 +1,10 @@
+{
+  "name": "Cylinder Array",
+  "description": "Multiple cylinders for Karman vortex street observation",
+  "objects": [
+    { "id": "cy1", "name": "Cylinder 1", "shape": "cylinder", "position": [-4, 1, 0], "rotation": [0, 0, 0], "scale": [1, 2, 1], "roughness": 0.5, "visible": true, "locked": false, "color": "#f59e0b" },
+    { "id": "cy2", "name": "Cylinder 2", "shape": "cylinder", "position": [-4, 1, 4], "rotation": [0, 0, 0], "scale": [1, 2, 1], "roughness": 0.5, "visible": true, "locked": false, "color": "#f59e0b" },
+    { "id": "cy3", "name": "Cylinder 3", "shape": "cylinder", "position": [-4, 1, -4], "rotation": [0, 0, 0], "scale": [1, 2, 1], "roughness": 0.5, "visible": true, "locked": false, "color": "#f59e0b" }
+  ],
+  "wind": { "azimuth": 0, "elevation": 0, "speed": 8, "turbulenceIntensity": 2, "profile": "uniform" }
+}
