@@ -10,6 +10,7 @@ export function useFluidSolver() {
   const { wind, simulation, setFieldData, setAnalytics } = useSimulatorStore();
   const objects = useObjectStore((s) => s.objects);
   const selectedId = useObjectStore((s) => s.selectedId);
+  const resetToken = useSimulatorStore((s) => s.resetToken);
 
   // Lazy import analytics to avoid circular
   const analyticsRef = useRef<typeof import('../simulator/Analytics')['computeAnalytics'] | null>(null);
@@ -43,6 +44,7 @@ export function useFluidSolver() {
           v: e.data.v,
           pressure: e.data.pressure,
           gridSize: simulation.gridSize,
+          solid: e.data.solid,
         };
         setFieldData(fieldData);
 
@@ -71,6 +73,14 @@ export function useFluidSolver() {
     const mask = buildSolidMask(objects, simulation.gridSize, simulation.cellScale);
     workerRef.current?.postMessage({ type: 'updateSolid', solidMask: mask });
   }, [objects, simulation.gridSize, simulation.cellScale]);
+
+  // Reset simulation fields when resetToken changes
+  useEffect(() => {
+    if (resetToken > 0) {
+      workerRef.current?.postMessage({ type: 'reset' });
+      pendingRef.current = false;
+    }
+  }, [resetToken]);
 
   const stepSolver = useCallback(() => {
     if (!workerRef.current || pendingRef.current || !simulation.running) return;

@@ -13,7 +13,7 @@ const tabs = [
   { id: 'sim', label: 'Sim' },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onClose }: { onClose?: () => void } = {}) {
   const [activeTab, setActiveTab] = useState('objects');
 
   return (
@@ -25,7 +25,7 @@ export function Sidebar() {
         borderRight: '1px solid #1e293b',
       }}
     >
-      <div className="flex border-b border-slate-700">
+      <div className="flex border-b border-slate-700 items-center">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -39,6 +39,15 @@ export function Sidebar() {
             {tab.label}
           </button>
         ))}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="px-2 py-2 text-slate-500 hover:text-slate-300 text-sm"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         {activeTab === 'presets' && <PresetPanel />}

@@ -13,12 +13,14 @@ interface SimulatorState {
   simulation: SimulationSettings;
   fieldData: FluidFieldData | null;
   analytics: AnalyticsData;
+  resetToken: number;
   setWind: (wind: Partial<WindSettings>) => void;
   setVisualization: (vis: Partial<VisualizationSettings>) => void;
   setSimulation: (sim: Partial<SimulationSettings>) => void;
   setFieldData: (data: FluidFieldData) => void;
   setAnalytics: (data: Partial<AnalyticsData>) => void;
   toggleVisualization: (mode: VisualizationSettings['activeVisualizations'][number]) => void;
+  resetSimulation: () => void;
 }
 
 export const useSimulatorStore = create<SimulatorState>((set) => ({
@@ -47,6 +49,7 @@ export const useSimulatorStore = create<SimulatorState>((set) => ({
     updateRate: 60,
   },
   fieldData: null,
+  resetToken: 0,
   analytics: {
     maxSpeed: 0,
     avgSpeed: 0,
@@ -72,4 +75,10 @@ export const useSimulatorStore = create<SimulatorState>((set) => ({
         : [...active, mode];
       return { visualization: { ...s.visualization, activeVisualizations: next } };
     }),
+  resetSimulation: () =>
+    set((s) => ({
+      simulation: { ...s.simulation, running: false },
+      resetToken: s.resetToken + 1,
+      fieldData: null,
+    })),
 }));

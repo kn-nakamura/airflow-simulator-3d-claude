@@ -48,13 +48,6 @@ export interface SimulationSettings {
   updateRate: number;
 }
 
-export interface FluidFieldData {
-  u: Float32Array;
-  v: Float32Array;
-  pressure: Float32Array;
-  gridSize: number;
-}
-
 export interface AnalyticsData {
   maxSpeed: number;
   avgSpeed: number;
@@ -81,7 +74,7 @@ export interface SceneData {
 }
 
 export interface SolverMessage {
-  type: 'init' | 'step' | 'updateSolid' | 'updateWind';
+  type: 'init' | 'step' | 'updateSolid' | 'updateWind' | 'reset';
   gridSize?: number;
   dt?: number;
   wind?: WindSettings;
@@ -96,4 +89,13 @@ export interface SolverResponse {
   u: Float32Array;
   v: Float32Array;
   pressure: Float32Array;
+  solid?: Uint8Array;
+}
+
+export interface FluidFieldData {
+  u: Float32Array;
+  v: Float32Array;
+  pressure: Float32Array;
+  gridSize: number;
+  solid?: Uint8Array;
 }

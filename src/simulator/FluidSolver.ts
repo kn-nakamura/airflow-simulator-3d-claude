@@ -54,11 +54,21 @@ export class FluidSolver {
     this.windProfile = profile;
   }
 
-  step(dt: number): void {
-    const N = this.N;
+  reset(): void {
+    this.u.fill(0);
+    this.v.fill(0);
+    this.u0.fill(0);
+    this.v0.fill(0);
+    this.p.fill(0);
+    this.div.fill(0);
+  }
 
+  step(dt: number): void {
     // Apply inflow boundary
     this.applyInflow();
+
+    // Enforce solid before processing (prevent leakage)
+    this.enforceSolid();
 
     // Add turbulence
     if (this.turbulenceIntensity > 0) {
@@ -73,10 +83,12 @@ export class FluidSolver {
     if (this.viscosity > 0) {
       this.diffuse(1, this.u, this.u0, this.viscosity, dt);
       this.diffuse(2, this.v, this.v0, this.viscosity, dt);
+      this.enforceSolid();
     }
 
     // Project to remove divergence after diffusion
     this.project(this.u, this.v);
+    this.enforceSolid();
 
     this.u0.set(this.u);
     this.v0.set(this.v);
@@ -84,11 +96,12 @@ export class FluidSolver {
     // Advect
     this.advect(1, this.u, this.u0, this.u0, this.v0, dt);
     this.advect(2, this.v, this.v0, this.u0, this.v0, dt);
+    this.enforceSolid();
 
     // Project (Hodge decomposition)
     this.project(this.u, this.v);
 
-    // Enforce solid boundaries
+    // Final solid enforcement
     this.enforceSolid();
 
     // Outflow boundary
@@ -97,33 +110,89 @@ export class FluidSolver {
 
   private applyInflow(): void {
     const N = this.N;
-    for (let j = 1; j <= N; j++) {
-      let wu = this.windU;
-      if (this.windProfile === 'boundary_layer') {
-        const height = j / N;
-        wu *= Math.pow(height, 0.2);
+
+    // Inject from left boundary when wind has positive u component
+    if (this.windU > 0) {
+      for (let j = 1; j <= N; j++) {
+        let wu = this.windU;
+        if (this.windProfile === 'boundary_layer') {
+          wu *= Math.pow(j / N, 0.2);
+        }
+        this.u[this.IX(0, j)] = wu;
+        this.u[this.IX(1, j)] = wu;
+        this.v[this.IX(0, j)] = this.windV;
+        this.v[this.IX(1, j)] = this.windV;
       }
-      // Left boundary inflow
-      this.u[this.IX(1, j)] = wu;
-      this.v[this.IX(1, j)] = this.windV;
-      this.u[this.IX(0, j)] = wu;
-      this.v[this.IX(0, j)] = this.windV;
+    }
+
+    // Inject from right boundary when wind has negative u component
+    if (this.windU < 0) {
+      for (let j = 1; j <= N; j++) {
+        let wu = this.windU;
+        if (this.windProfile === 'boundary_layer') {
+          wu *= Math.pow(j / N, 0.2);
+        }
+        this.u[this.IX(N, j)] = wu;
+        this.u[this.IX(N + 1, j)] = wu;
+        this.v[this.IX(N, j)] = this.windV;
+        this.v[this.IX(N + 1, j)] = this.windV;
+      }
+    }
+
+    // Inject from bottom boundary when wind has positive v component
+    if (this.windV > 0) {
+      for (let i = 1; i <= N; i++) {
+        this.u[this.IX(i, 0)] = this.windU;
+        this.u[this.IX(i, 1)] = this.windU;
+        this.v[this.IX(i, 0)] = this.windV;
+        this.v[this.IX(i, 1)] = this.windV;
+      }
+    }
+
+    // Inject from top boundary when wind has negative v component
+    if (this.windV < 0) {
+      for (let i = 1; i <= N; i++) {
+        this.u[this.IX(i, N)] = this.windU;
+        this.u[this.IX(i, N + 1)] = this.windU;
+        this.v[this.IX(i, N)] = this.windV;
+        this.v[this.IX(i, N + 1)] = this.windV;
+      }
     }
   }
 
   private applyOutflow(): void {
     const N = this.N;
-    for (let j = 1; j <= N; j++) {
-      // Right boundary: convective outflow
-      this.u[this.IX(N + 1, j)] = this.u[this.IX(N, j)];
-      this.v[this.IX(N + 1, j)] = this.v[this.IX(N, j)];
+
+    // Right outflow if wind going rightward
+    if (this.windU >= 0) {
+      for (let j = 1; j <= N; j++) {
+        this.u[this.IX(N + 1, j)] = this.u[this.IX(N, j)];
+        this.v[this.IX(N + 1, j)] = this.v[this.IX(N, j)];
+      }
     }
-    // Top and bottom: slip
-    for (let i = 0; i <= N + 1; i++) {
-      this.u[this.IX(i, 0)] = this.u[this.IX(i, 1)];
-      this.v[this.IX(i, 0)] = 0;
-      this.u[this.IX(i, N + 1)] = this.u[this.IX(i, N)];
-      this.v[this.IX(i, N + 1)] = 0;
+
+    // Left outflow if wind going leftward
+    if (this.windU <= 0) {
+      for (let j = 1; j <= N; j++) {
+        this.u[this.IX(0, j)] = this.u[this.IX(1, j)];
+        this.v[this.IX(0, j)] = this.v[this.IX(1, j)];
+      }
+    }
+
+    // Top outflow if wind going upward
+    if (this.windV >= 0) {
+      for (let i = 0; i <= N + 1; i++) {
+        this.u[this.IX(i, N + 1)] = this.u[this.IX(i, N)];
+        this.v[this.IX(i, N + 1)] = this.v[this.IX(i, N)];
+      }
+    }
+
+    // Bottom outflow if wind going downward
+    if (this.windV <= 0) {
+      for (let i = 0; i <= N + 1; i++) {
+        this.u[this.IX(i, 0)] = this.u[this.IX(i, 1)];
+        this.v[this.IX(i, 0)] = this.v[this.IX(i, 1)];
+      }
     }
   }
 
@@ -190,38 +259,55 @@ export class FluidSolver {
     const N = this.N;
     const h = 1.0 / N;
 
-    // Compute divergence
+    // Compute divergence (use zero velocity at solid faces for no-penetration)
     for (let j = 1; j <= N; j++) {
       for (let i = 1; i <= N; i++) {
-        this.div[this.IX(i, j)] =
-          -0.5 * h * (u[this.IX(i + 1, j)] - u[this.IX(i - 1, j)] +
-                      v[this.IX(i, j + 1)] - v[this.IX(i, j - 1)]);
+        if (this.solid[this.IX(i, j)]) {
+          this.div[this.IX(i, j)] = 0;
+          this.p[this.IX(i, j)] = 0;
+          continue;
+        }
+        // Use zero for velocity at solid-fluid interface faces
+        const uR = this.solid[this.IX(i + 1, j)] ? 0 : u[this.IX(i + 1, j)];
+        const uL = this.solid[this.IX(i - 1, j)] ? 0 : u[this.IX(i - 1, j)];
+        const vT = this.solid[this.IX(i, j + 1)] ? 0 : v[this.IX(i, j + 1)];
+        const vB = this.solid[this.IX(i, j - 1)] ? 0 : v[this.IX(i, j - 1)];
+        this.div[this.IX(i, j)] = -0.5 * h * (uR - uL + vT - vB);
         this.p[this.IX(i, j)] = 0;
       }
     }
     this.setBoundary(0, this.div);
     this.setBoundary(0, this.p);
 
-    // Gauss-Seidel solve for pressure
+    // Gauss-Seidel solve for pressure with Neumann BC at solid boundaries
     for (let k = 0; k < this.iterations; k++) {
       for (let j = 1; j <= N; j++) {
         for (let i = 1; i <= N; i++) {
           if (this.solid[this.IX(i, j)]) continue;
-          this.p[this.IX(i, j)] =
-            (this.div[this.IX(i, j)] +
-              this.p[this.IX(i - 1, j)] + this.p[this.IX(i + 1, j)] +
-              this.p[this.IX(i, j - 1)] + this.p[this.IX(i, j + 1)]) / 4;
+          // Count fluid neighbors and apply Neumann BC (zero gradient) at solid faces
+          let pSum = this.div[this.IX(i, j)];
+          let cnt = 0;
+          if (!this.solid[this.IX(i - 1, j)]) { pSum += this.p[this.IX(i - 1, j)]; cnt++; }
+          if (!this.solid[this.IX(i + 1, j)]) { pSum += this.p[this.IX(i + 1, j)]; cnt++; }
+          if (!this.solid[this.IX(i, j - 1)]) { pSum += this.p[this.IX(i, j - 1)]; cnt++; }
+          if (!this.solid[this.IX(i, j + 1)]) { pSum += this.p[this.IX(i, j + 1)]; cnt++; }
+          if (cnt > 0) this.p[this.IX(i, j)] = pSum / cnt;
         }
       }
       this.setBoundary(0, this.p);
     }
 
-    // Subtract pressure gradient
+    // Subtract pressure gradient using Neumann BC at solid faces
     for (let j = 1; j <= N; j++) {
       for (let i = 1; i <= N; i++) {
         if (this.solid[this.IX(i, j)]) continue;
-        u[this.IX(i, j)] -= 0.5 * N * (this.p[this.IX(i + 1, j)] - this.p[this.IX(i - 1, j)]);
-        v[this.IX(i, j)] -= 0.5 * N * (this.p[this.IX(i, j + 1)] - this.p[this.IX(i, j - 1)]);
+        // Use current cell pressure for solid neighbors (zero gradient = no acceleration toward solid)
+        const pL = this.solid[this.IX(i - 1, j)] ? this.p[this.IX(i, j)] : this.p[this.IX(i - 1, j)];
+        const pR = this.solid[this.IX(i + 1, j)] ? this.p[this.IX(i, j)] : this.p[this.IX(i + 1, j)];
+        const pB = this.solid[this.IX(i, j - 1)] ? this.p[this.IX(i, j)] : this.p[this.IX(i, j - 1)];
+        const pT = this.solid[this.IX(i, j + 1)] ? this.p[this.IX(i, j)] : this.p[this.IX(i, j + 1)];
+        u[this.IX(i, j)] -= 0.5 * N * (pR - pL);
+        v[this.IX(i, j)] -= 0.5 * N * (pT - pB);
       }
     }
     this.setBoundary(1, u);
