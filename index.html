@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>3D Airflow Simulator</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Courier New',monospace;background:#0a0a1a;color:#e5e7eb;overflow:hidden;display:flex;height:100vh}
+
+/* Side Panel */
+#sidebar{width:280px;min-width:280px;background:#111827;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;z-index:10;border-right:1px solid #1f2937}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-thumb{background:#374151;border-radius:2px}
+
+.panel-title{font-size:13px;font-weight:700;color:#06b6d4;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.card{background:#1f2937;border-radius:8px;padding:12px;border:1px solid #374151}
+.card h3{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border:none;border-radius:6px;font-family:inherit;font-size:12px;cursor:pointer;transition:all .15s}
+.btn-primary{background:#06b6d4;color:#0a0a1a;font-weight:700}
+.btn-primary:hover{background:#22d3ee}
+.btn-danger{background:#dc2626;color:#fff}
+.btn-danger:hover{background:#ef4444}
+.btn-secondary{background:#374151;color:#e5e7eb}
+.btn-secondary:hover{background:#4b5563}
+.btn-sm{padding:4px 8px;font-size:11px}
+
+/* Radio */
+.radio-group{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.radio-group label{display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;padding:4px 8px;border-radius:4px;background:#374151;transition:background .15s}
+.radio-group label:hover{background:#4b5563}
+.radio-group input[type=radio]{accent-color:#06b6d4}
+
+/* Sliders */
+.slider-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.slider-row label{font-size:11px;color:#9ca3af;min-width:40px}
+.slider-row input[type=range]{flex:1;accent-color:#06b6d4;height:4px}
+.slider-row .val{font-size:11px;color:#06b6d4;min-width:36px;text-align:right}
+
+/* Input fields */
+.input-row{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+.input-row label{font-size:11px;color:#9ca3af;min-width:16px}
+.input-row input[type=number]{width:60px;background:#0f172a;border:1px solid #374151;color:#e5e7eb;padding:3px 5px;border-radius:4px;font-family:inherit;font-size:11px}
+.input-row input[type=number]:focus{outline:none;border-color:#06b6d4}
+
+/* Checkboxes */
+.check-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.check-row input[type=checkbox]{accent-color:#06b6d4}
+.check-row label{font-size:12px;cursor:pointer}
+.check-row .sub{margin-left:auto}
+.check-row .sub input[type=number]{width:50px;background:#0f172a;border:1px solid #374151;color:#e5e7eb;padding:2px 4px;border-radius:4px;font-family:inherit;font-size:11px}
+
+/* Sim buttons */
+.sim-btns{display:flex;gap:6px}
+.sim-btns .btn{flex:1}
+
+/* Canvas */
+#canvas-container{flex:1;position:relative}
+canvas{display:block;width:100%;height:100%}
+
+/* FPS */
+#fps{position:fixed;right:12px;bottom:12px;background:rgba(0,0,0,.7);color:#06b6d4;font-family:'Courier New',monospace;font-size:12px;padding:4px 8px;border-radius:4px;z-index:20}
+
+/* Object list */
+.obj-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;margin-bottom:2px;transition:background .1s}
+.obj-item:hover{background:#374151}
+.obj-item.selected{background:#164e63;border:1px solid #06b6d4}
+.obj-item .dot{width:8px;height:8px;border-radius:50%;background:#06b6d4}
+.obj-item .name{flex:1}
+
+#no-selection{font-size:11px;color:#6b7280;font-style:italic}
+</style>
+</head>
+<body>
+
+<!-- Side Panel -->
+<div id="sidebar">
+  <div class="panel-title">3D Airflow Simulator</div>
+
+  <!-- Add Object -->
+  <div class="card">
+    <h3>Add Object</h3>
+    <div class="radio-group">
+      <label><input type="radio" name="objType" value="box" checked> Box</label>
+      <label><input type="radio" name="objType" value="sphere"> Sphere</label>
+      <label><input type="radio" name="objType" value="cylinder"> Cylinder</label>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="addObject()">+ Add</button>
+  </div>
+
+  <!-- Object List -->
+  <div class="card">
+    <h3>Objects</h3>
+    <div id="object-list"></div>
+  </div>
+
+  <!-- Selected Object -->
+  <div class="card" id="selected-card" style="display:none">
+    <h3>Selected: <span id="sel-name"></span></h3>
+    <div style="font-size:11px;color:#9ca3af;margin-bottom:4px">Position</div>
+    <div class="input-row"><label>X</label><input type="number" id="pos-x" step="0.1" onchange="updateSelectedProp()"></div>
+    <div class="input-row"><label>Y</label><input type="number" id="pos-y" step="0.1" onchange="updateSelectedProp()"></div>
+    <div class="input-row"><label>Z</label><input type="number" id="pos-z" step="0.1" onchange="updateSelectedProp()"></div>
+    <div style="font-size:11px;color:#9ca3af;margin:6px 0 4px">Scale</div>
+    <div class="input-row"><label>X</label><input type="number" id="scl-x" step="0.1" min="0.1" onchange="updateSelectedProp()"></div>
+    <div class="input-row"><label>Y</label><input type="number" id="scl-y" step="0.1" min="0.1" onchange="updateSelectedProp()"></div>
+    <div class="input-row"><label>Z</label><input type="number" id="scl-z" step="0.1" min="0.1" onchange="updateSelectedProp()"></div>
+    <button class="btn btn-danger btn-sm" style="width:100%;margin-top:8px" onclick="deleteSelected()">Delete</button>
+  </div>
+
+  <!-- Wind -->
+  <div class="card">
+    <h3>Wind Settings</h3>
+    <div class="slider-row"><label>Azim</label><input type="range" id="wind-azimuth" min="0" max="360" value="180"><span class="val" id="wind-azimuth-val">180°</span></div>
+    <div class="slider-row"><label>Elev</label><input type="range" id="wind-elevation" min="-90" max="90" value="0"><span class="val" id="wind-elevation-val">0°</span></div>
+    <div class="slider-row"><label>Speed</label><input type="range" id="wind-speed" min="0" max="100" value="50"><span class="val" id="wind-speed-val">50</span></div>
+  </div>
+
+  <!-- Visualization -->
+  <div class="card">
+    <h3>Visualization</h3>
+    <div class="check-row"><input type="checkbox" id="viz-particles" checked><label for="viz-particles">Particles</label>
+      <span class="sub"><input type="number" id="particle-count" value="1000" min="100" max="2000" step="100"></span></div>
+    <div class="check-row"><input type="checkbox" id="viz-streamlines" checked><label for="viz-streamlines">Streamlines</label></div>
+    <div class="check-row"><input type="checkbox" id="viz-velocity" checked><label for="viz-velocity">Velocity Heatmap</label></div>
+    <div class="check-row"><input type="checkbox" id="viz-pressure"><label for="viz-pressure">Pressure Heatmap</label></div>
+  </div>
+
+  <!-- Simulation -->
+  <div class="card">
+    <h3>Simulation</h3>
+    <div class="sim-btns">
+      <button class="btn btn-primary" id="btn-playpause" onclick="toggleSim()">▶ Start</button>
+      <button class="btn btn-secondary" onclick="resetSim()">↺ Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- Canvas -->
+<div id="canvas-container"></div>
+<div id="fps">-- FPS</div>
+
+<!-- Three.js -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+// ============================================================
+// GLOBALS
+// ============================================================
+let scene, camera, renderer, orbitControls, transformControls;
+let simRunning = false;
+let frameCount = 0;
+
+const objects = []; // {mesh, type, id}
+let selectedObj = null;
+let nextId = 1;
+
+const N = 64; // grid size
+const SIM_SCALE = 10; // world units for the sim domain
+
+// ============================================================
+// FLUID SOLVER (Jos Stam Stable Fluids - 2D on XZ plane)
+// ============================================================
+class FluidSolver {
+  constructor(n) {
+    this.n = n;
+    const size = (n + 2) * (n + 2);
+    this.u = new Float32Array(size);      // velocity x
+    this.v = new Float32Array(size);      // velocity z
+    this.u0 = new Float32Array(size);
+    this.v0 = new Float32Array(size);
+    this.p = new Float32Array(size);      // pressure
+    this.div = new Float32Array(size);
+    this.solid = new Uint8Array(size);    // solid cells
+    this.dt = 0.1;
+    this.visc = 0.0001;
+    this.iterations = 20;
+  }
+
+  IX(i, j) { return i + (this.n + 2) * j; }
+
+  reset() {
+    this.u.fill(0); this.v.fill(0);
+    this.u0.fill(0); this.v0.fill(0);
+    this.p.fill(0); this.div.fill(0);
+    this.solid.fill(0);
+  }
+
+  addSource(x, s, dt) {
+    for (let i = 0; i < x.length; i++) x[i] += dt * s[i];
+  }
+
+  setBoundary(b, x) {
+    const n = this.n;
+    for (let i = 1; i <= n; i++) {
+      x[this.IX(0, i)]     = b === 1 ? -x[this.IX(1, i)] : x[this.IX(1, i)];
+      x[this.IX(n + 1, i)] = b === 1 ? -x[this.IX(n, i)] : x[this.IX(n, i)];
+      x[this.IX(i, 0)]     = b === 2 ? -x[this.IX(i, 1)] : x[this.IX(i, 1)];
+      x[this.IX(i, n + 1)] = b === 2 ? -x[this.IX(i, n)] : x[this.IX(i, n)];
+    }
+    x[this.IX(0, 0)]         = 0.5 * (x[this.IX(1, 0)] + x[this.IX(0, 1)]);
+    x[this.IX(0, n + 1)]     = 0.5 * (x[this.IX(1, n + 1)] + x[this.IX(0, n)]);
+    x[this.IX(n + 1, 0)]     = 0.5 * (x[this.IX(n, 0)] + x[this.IX(n + 1, 1)]);
+    x[this.IX(n + 1, n + 1)] = 0.5 * (x[this.IX(n, n + 1)] + x[this.IX(n + 1, n)]);
+
+    // Solid boundary
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        if (this.solid[this.IX(i, j)]) {
+          x[this.IX(i, j)] = 0;
+        }
+      }
+    }
+  }
+
+  diffuse(b, x, x0, diff, dt) {
+    const n = this.n;
+    const a = dt * diff * n * n;
+    for (let k = 0; k < this.iterations; k++) {
+      for (let j = 1; j <= n; j++) {
+        for (let i = 1; i <= n; i++) {
+          if (this.solid[this.IX(i, j)]) { x[this.IX(i, j)] = 0; continue; }
+          x[this.IX(i, j)] = (x0[this.IX(i, j)] + a * (
+            x[this.IX(i - 1, j)] + x[this.IX(i + 1, j)] +
+            x[this.IX(i, j - 1)] + x[this.IX(i, j + 1)]
+          )) / (1 + 4 * a);
+        }
+      }
+      this.setBoundary(b, x);
+    }
+  }
+
+  advect(b, d, d0, u, v, dt) {
+    const n = this.n;
+    const dt0 = dt * n;
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        if (this.solid[this.IX(i, j)]) { d[this.IX(i, j)] = 0; continue; }
+        let x = i - dt0 * u[this.IX(i, j)];
+        let y = j - dt0 * v[this.IX(i, j)];
+        x = Math.max(0.5, Math.min(n + 0.5, x));
+        y = Math.max(0.5, Math.min(n + 0.5, y));
+        const i0 = Math.floor(x), i1 = i0 + 1;
+        const j0 = Math.floor(y), j1 = j0 + 1;
+        const s1 = x - i0, s0 = 1 - s1;
+        const t1 = y - j0, t0 = 1 - t1;
+        d[this.IX(i, j)] = s0 * (t0 * d0[this.IX(i0, j0)] + t1 * d0[this.IX(i0, j1)]) +
+                            s1 * (t0 * d0[this.IX(i1, j0)] + t1 * d0[this.IX(i1, j1)]);
+      }
+    }
+    this.setBoundary(b, d);
+  }
+
+  project(u, v, p, div) {
+    const n = this.n;
+    const h = 1.0 / n;
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        if (this.solid[this.IX(i, j)]) { div[this.IX(i, j)] = 0; p[this.IX(i, j)] = 0; continue; }
+        div[this.IX(i, j)] = -0.5 * h * (
+          u[this.IX(i + 1, j)] - u[this.IX(i - 1, j)] +
+          v[this.IX(i, j + 1)] - v[this.IX(i, j - 1)]
+        );
+        p[this.IX(i, j)] = 0;
+      }
+    }
+    this.setBoundary(0, div);
+    this.setBoundary(0, p);
+
+    for (let k = 0; k < this.iterations; k++) {
+      for (let j = 1; j <= n; j++) {
+        for (let i = 1; i <= n; i++) {
+          if (this.solid[this.IX(i, j)]) continue;
+          p[this.IX(i, j)] = (div[this.IX(i, j)] +
+            p[this.IX(i - 1, j)] + p[this.IX(i + 1, j)] +
+            p[this.IX(i, j - 1)] + p[this.IX(i, j + 1)]
+          ) / 4;
+        }
+      }
+      this.setBoundary(0, p);
+    }
+
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        if (this.solid[this.IX(i, j)]) { u[this.IX(i, j)] = 0; v[this.IX(i, j)] = 0; continue; }
+        u[this.IX(i, j)] -= 0.5 * n * (p[this.IX(i + 1, j)] - p[this.IX(i - 1, j)]);
+        v[this.IX(i, j)] -= 0.5 * n * (p[this.IX(i, j + 1)] - p[this.IX(i, j - 1)]);
+      }
+    }
+    this.setBoundary(1, u);
+    this.setBoundary(2, v);
+  }
+
+  updateSolids(worldObjects) {
+    const n = this.n;
+    this.solid.fill(0);
+    for (const obj of worldObjects) {
+      const mesh = obj.mesh;
+      mesh.updateMatrixWorld();
+      const bbox = new THREE.Box3().setFromObject(mesh);
+      // Convert world coords to grid coords
+      const gi0 = Math.max(1, Math.floor((bbox.min.x / SIM_SCALE + 0.5) * n));
+      const gi1 = Math.min(n, Math.ceil((bbox.max.x / SIM_SCALE + 0.5) * n));
+      const gj0 = Math.max(1, Math.floor((bbox.min.z / SIM_SCALE + 0.5) * n));
+      const gj1 = Math.min(n, Math.ceil((bbox.max.z / SIM_SCALE + 0.5) * n));
+      for (let j = gj0; j <= gj1; j++) {
+        for (let i = gi0; i <= gi1; i++) {
+          this.solid[this.IX(i, j)] = 1;
+        }
+      }
+    }
+  }
+
+  step(windU, windV) {
+    const n = this.n;
+    const dt = this.dt;
+
+    // Add wind as source on boundary cells
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        this.u0[this.IX(i, j)] = 0;
+        this.v0[this.IX(i, j)] = 0;
+      }
+    }
+
+    // Apply wind forcing on edges and everywhere gently
+    const force = 5.0;
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        if (!this.solid[this.IX(i, j)]) {
+          // Gentle global forcing
+          this.u0[this.IX(i, j)] += windU * force * 0.5;
+          this.v0[this.IX(i, j)] += windV * force * 0.5;
+        }
+      }
+    }
+    // Stronger at inflow edges
+    if (windU > 0) { for (let j = 1; j <= n; j++) { this.u0[this.IX(1, j)] += windU * force * 3; } }
+    if (windU < 0) { for (let j = 1; j <= n; j++) { this.u0[this.IX(n, j)] += windU * force * 3; } }
+    if (windV > 0) { for (let j = 1; j <= n; j++) { this.v0[this.IX(j, 1)] += windV * force * 3; } }
+    if (windV < 0) { for (let j = 1; j <= n; j++) { this.v0[this.IX(j, n)] += windV * force * 3; } }
+
+    this.addSource(this.u, this.u0, dt);
+    this.addSource(this.v, this.v0, dt);
+
+    // Diffuse
+    [this.u0, this.u] = [this.u, this.u0];
+    this.diffuse(1, this.u, this.u0, this.visc, dt);
+    [this.v0, this.v] = [this.v, this.v0];
+    this.diffuse(2, this.v, this.v0, this.visc, dt);
+
+    this.project(this.u, this.v, this.p, this.div);
+
+    // Advect
+    [this.u0, this.u] = [this.u, this.u0];
+    [this.v0, this.v] = [this.v, this.v0];
+    this.advect(1, this.u, this.u0, this.u0, this.v0, dt);
+    this.advect(2, this.v, this.v0, this.u0, this.v0, dt);
+
+    this.project(this.u, this.v, this.p, this.div);
+  }
+
+  getVelocityAt(gx, gz) {
+    const n = this.n;
+    const fi = Math.max(1, Math.min(n, gx));
+    const fj = Math.max(1, Math.min(n, gz));
+    const i0 = Math.floor(fi), j0 = Math.floor(fj);
+    const i1 = Math.min(i0 + 1, n), j1 = Math.min(j0 + 1, n);
+    const sx = fi - i0, sy = fj - j0;
+    const ux = (1 - sx) * (1 - sy) * this.u[this.IX(i0, j0)] + sx * (1 - sy) * this.u[this.IX(i1, j0)] +
+               (1 - sx) * sy * this.u[this.IX(i0, j1)] + sx * sy * this.u[this.IX(i1, j1)];
+    const uz = (1 - sx) * (1 - sy) * this.v[this.IX(i0, j0)] + sx * (1 - sy) * this.v[this.IX(i1, j0)] +
+               (1 - sx) * sy * this.v[this.IX(i0, j1)] + sx * sy * this.v[this.IX(i1, j1)];
+    return { x: ux, z: uz };
+  }
+}
+
+const fluid = new FluidSolver(N);
+
+// ============================================================
+// WIND
+// ============================================================
+function getWindVector() {
+  const az = parseFloat(document.getElementById('wind-azimuth').value) * Math.PI / 180;
+  const speed = parseFloat(document.getElementById('wind-speed').value) / 100;
+  return { u: Math.sin(az) * speed, v: Math.cos(az) * speed };
+}
+
+// ============================================================
+// THREE.JS SETUP
+// ============================================================
+function initThree() {
+  const container = document.getElementById('canvas-container');
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0a1a);
+  scene.fog = new THREE.FogExp2(0x0a0a1a, 0.02);
+
+  camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
+  camera.position.set(8, 10, 12);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  container.appendChild(renderer.domElement);
+
+  // Lights
+  const ambient = new THREE.AmbientLight(0x404060, 0.6);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.2);
+  dir.position.set(5, 10, 7);
+  scene.add(dir);
+  const dir2 = new THREE.DirectionalLight(0x06b6d4, 0.3);
+  dir2.position.set(-5, 5, -5);
+  scene.add(dir2);
+
+  // Grid helper
+  const grid = new THREE.GridHelper(SIM_SCALE, 16, 0x1a3a4a, 0x112233);
+  scene.add(grid);
+
+  // Ground plane (subtle)
+  const groundGeo = new THREE.PlaneGeometry(SIM_SCALE, SIM_SCALE);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x0d1117, transparent: true, opacity: 0.5 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.01;
+  scene.add(ground);
+
+  // Orbit Controls
+  orbitControls = new OrbitControls(camera, renderer.domElement);
+  orbitControls.enableDamping = true;
+  orbitControls.dampingFactor = 0.08;
+  orbitControls.target.set(0, 0, 0);
+
+  // Transform Controls
+  transformControls = new TransformControls(camera, renderer.domElement);
+  transformControls.setSize(0.6);
+  transformControls.addEventListener('dragging-changed', (event) => {
+    orbitControls.enabled = !event.value;
+  });
+  transformControls.addEventListener('objectChange', () => {
+    if (selectedObj) {
+      syncUIFromSelected();
+      // Constrain Y to ground
+      selectedObj.mesh.position.y = Math.max(selectedObj.mesh.scale.y * 0.5, selectedObj.mesh.position.y);
+    }
+  });
+  scene.add(transformControls);
+
+  // Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  });
+
+  // Click to select
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    if (transformControls.dragging) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const meshes = objects.map(o => o.mesh);
+    const intersects = raycaster.intersectObjects(meshes);
+    if (intersects.length > 0) {
+      const hit = intersects[0].object;
+      const obj = objects.find(o => o.mesh === hit);
+      if (obj) selectObject(obj);
+    }
+  });
+}
+
+// ============================================================
+// WIND ARROW
+// ============================================================
+let windArrow;
+function createWindArrow() {
+  const group = new THREE.Group();
+
+  const shaftGeo = new THREE.CylinderGeometry(0.06, 0.06, 2, 8);
+  const shaftMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x06b6d4, emissiveIntensity: 0.5 });
+  const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+  shaft.position.y = 1;
+  group.add(shaft);
+
+  const headGeo = new THREE.ConeGeometry(0.18, 0.5, 8);
+  const head = new THREE.Mesh(headGeo, shaftMat);
+  head.position.y = 2.25;
+  group.add(head);
+
+  windArrow = group;
+  scene.add(windArrow);
+  updateWindArrow();
+}
+
+function updateWindArrow() {
+  if (!windArrow) return;
+  const az = parseFloat(document.getElementById('wind-azimuth').value) * Math.PI / 180;
+  const el = parseFloat(document.getElementById('wind-elevation').value) * Math.PI / 180;
+  const speed = parseFloat(document.getElementById('wind-speed').value) / 100;
+
+  windArrow.position.set(-SIM_SCALE * 0.4, 3, -SIM_SCALE * 0.4);
+  windArrow.rotation.set(0, 0, 0);
+  windArrow.lookAt(
+    windArrow.position.x + Math.sin(az) * 1,
+    windArrow.position.y + Math.sin(el) * 1,
+    windArrow.position.z + Math.cos(az) * 1
+  );
+  windArrow.rotateX(Math.PI / 2);
+  const sc = 0.5 + speed * 1.5;
+  windArrow.scale.set(sc, sc, sc);
+}
+
+// ============================================================
+// OBJECT MANAGEMENT
+// ============================================================
+function addObject() {
+  const type = document.querySelector('input[name="objType"]:checked').value;
+  let geo, name;
+  switch (type) {
+    case 'box':
+      geo = new THREE.BoxGeometry(1, 1, 1);
+      name = 'Box';
+      break;
+    case 'sphere':
+      geo = new THREE.SphereGeometry(0.5, 16, 16);
+      name = 'Sphere';
+      break;
+    case 'cylinder':
+      geo = new THREE.CylinderGeometry(0.4, 0.4, 1, 16);
+      name = 'Cylinder';
+      break;
+  }
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x8899aa,
+    metalness: 0.8,
+    roughness: 0.2,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(0, 0.5, 0);
+  scene.add(mesh);
+  const obj = { mesh, type, id: nextId++, name: `${name}_${nextId - 1}` };
+  objects.push(obj);
+  selectObject(obj);
+  refreshObjectList();
+}
+window.addObject = addObject;
+
+function selectObject(obj) {
+  selectedObj = obj;
+  transformControls.attach(obj.mesh);
+  syncUIFromSelected();
+  document.getElementById('selected-card').style.display = 'block';
+  refreshObjectList();
+}
+
+function syncUIFromSelected() {
+  if (!selectedObj) return;
+  const m = selectedObj.mesh;
+  document.getElementById('sel-name').textContent = selectedObj.name;
+  document.getElementById('pos-x').value = m.position.x.toFixed(1);
+  document.getElementById('pos-y').value = m.position.y.toFixed(1);
+  document.getElementById('pos-z').value = m.position.z.toFixed(1);
+  document.getElementById('scl-x').value = m.scale.x.toFixed(1);
+  document.getElementById('scl-y').value = m.scale.y.toFixed(1);
+  document.getElementById('scl-z').value = m.scale.z.toFixed(1);
+}
+
+function updateSelectedProp() {
+  if (!selectedObj) return;
+  const m = selectedObj.mesh;
+  m.position.set(
+    parseFloat(document.getElementById('pos-x').value) || 0,
+    parseFloat(document.getElementById('pos-y').value) || 0,
+    parseFloat(document.getElementById('pos-z').value) || 0
+  );
+  m.scale.set(
+    parseFloat(document.getElementById('scl-x').value) || 1,
+    parseFloat(document.getElementById('scl-y').value) || 1,
+    parseFloat(document.getElementById('scl-z').value) || 1
+  );
+}
+window.updateSelectedProp = updateSelectedProp;
+
+function deleteSelected() {
+  if (!selectedObj) return;
+  transformControls.detach();
+  scene.remove(selectedObj.mesh);
+  selectedObj.mesh.geometry.dispose();
+  selectedObj.mesh.material.dispose();
+  const idx = objects.indexOf(selectedObj);
+  if (idx >= 0) objects.splice(idx, 1);
+  selectedObj = null;
+  document.getElementById('selected-card').style.display = 'none';
+  refreshObjectList();
+}
+window.deleteSelected = deleteSelected;
+
+function refreshObjectList() {
+  const list = document.getElementById('object-list');
+  if (objects.length === 0) {
+    list.innerHTML = '<div id="no-selection">No objects placed</div>';
+    return;
+  }
+  list.innerHTML = objects.map(o =>
+    `<div class="obj-item ${o === selectedObj ? 'selected' : ''}" data-id="${o.id}">
+      <span class="dot"></span><span class="name">${o.name}</span>
+    </div>`
+  ).join('');
+  list.querySelectorAll('.obj-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const obj = objects.find(o => o.id === parseInt(el.dataset.id));
+      if (obj) selectObject(obj);
+    });
+  });
+}
+
+// ============================================================
+// PARTICLE STREAM VISUALIZATION
+// ============================================================
+class ParticleStream {
+  constructor(scene, count) {
+    this.maxCount = 2000;
+    this.count = count;
+    const geo = new THREE.SphereGeometry(0.04, 4, 4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    this.mesh = new THREE.InstancedMesh(geo, mat, this.maxCount);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(this.mesh);
+
+    // Color buffer
+    this.colors = new Float32Array(this.maxCount * 3);
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(this.colors, 3);
+    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+
+    this.positions = new Float32Array(this.maxCount * 3);
+    this.dummy = new THREE.Object3D();
+    this.initParticles();
+  }
+
+  initParticles() {
+    const half = SIM_SCALE / 2;
+    for (let i = 0; i < this.maxCount; i++) {
+      this.positions[i * 3] = (Math.random() - 0.5) * SIM_SCALE;
+      this.positions[i * 3 + 1] = 0.1 + Math.random() * 0.3;
+      this.positions[i * 3 + 2] = (Math.random() - 0.5) * SIM_SCALE;
+    }
+  }
+
+  update(solver) {
+    this.mesh.count = this.count;
+    const half = SIM_SCALE / 2;
+    const n = solver.n;
+
+    for (let i = 0; i < this.count; i++) {
+      let px = this.positions[i * 3];
+      let py = this.positions[i * 3 + 1];
+      let pz = this.positions[i * 3 + 2];
+
+      // Grid coords
+      const gx = (px / SIM_SCALE + 0.5) * n;
+      const gz = (pz / SIM_SCALE + 0.5) * n;
+      const vel = solver.getVelocityAt(gx, gz);
+
+      const speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+      const moveScale = 0.15;
+      px += vel.x * moveScale;
+      pz += vel.z * moveScale;
+
+      // Wrap around
+      if (px > half) px -= SIM_SCALE;
+      if (px < -half) px += SIM_SCALE;
+      if (pz > half) pz -= SIM_SCALE;
+      if (pz < -half) pz += SIM_SCALE;
+
+      this.positions[i * 3] = px;
+      this.positions[i * 3 + 1] = py;
+      this.positions[i * 3 + 2] = pz;
+
+      // Size based on speed
+      const sc = 0.5 + Math.min(speed * 2, 3);
+      this.dummy.position.set(px, py, pz);
+      this.dummy.scale.set(sc, sc, sc);
+      this.dummy.updateMatrix();
+      this.mesh.setMatrixAt(i, this.dummy.matrix);
+
+      // Color: blue(slow) -> cyan -> white(fast)
+      const t = Math.min(speed * 1.5, 1);
+      let r, g, b;
+      if (t < 0.5) {
+        const s = t * 2;
+        r = s * 0.02;
+        g = 0.4 + s * 0.3;
+        b = 0.8 + s * 0.2;
+      } else {
+        const s = (t - 0.5) * 2;
+        r = 0.02 + s * 0.98;
+        g = 0.7 + s * 0.3;
+        b = 1.0;
+      }
+      this.colors[i * 3] = r;
+      this.colors[i * 3 + 1] = g;
+      this.colors[i * 3 + 2] = b;
+    }
+
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceColor.needsUpdate = true;
+  }
+
+  setVisible(v) { this.mesh.visible = v; }
+  setCount(c) { this.count = Math.min(c, this.maxCount); }
+}
+
+// ============================================================
+// STREAMLINES VISUALIZATION
+// ============================================================
+class Streamlines {
+  constructor(scene) {
+    this.scene = scene;
+    this.lines = [];
+    this.lastRefresh = 0;
+    this.refreshInterval = 2000;
+  }
+
+  refresh(solver) {
+    // Remove old
+    for (const l of this.lines) {
+      this.scene.remove(l);
+      l.geometry.dispose();
+      l.material.dispose();
+    }
+    this.lines = [];
+
+    const n = solver.n;
+    const steps = 60;
+    const seedCount = 12;
+
+    for (let si = 0; si < seedCount; si++) {
+      for (let sj = 0; sj < seedCount; sj++) {
+        const startGx = 2 + (si / (seedCount - 1)) * (n - 4);
+        const startGz = 2 + (sj / (seedCount - 1)) * (n - 4);
+
+        const points = [];
+        let gx = startGx, gz = startGz;
+
+        for (let s = 0; s < steps; s++) {
+          const wx = (gx / n - 0.5) * SIM_SCALE;
+          const wz = (gz / n - 0.5) * SIM_SCALE;
+          points.push(new THREE.Vector3(wx, 0.05, wz));
+
+          const vel = solver.getVelocityAt(gx, gz);
+          const speed = Math.sqrt(vel.x * vel.x + vel.z * vel.z);
+          if (speed < 0.001) break;
+
+          gx += vel.x * 0.5;
+          gz += vel.z * 0.5;
+
+          if (gx < 1 || gx > n || gz < 1 || gz > n) break;
+        }
+
+        if (points.length > 2) {
+          const geo = new THREE.BufferGeometry().setFromPoints(points);
+          const mat = new THREE.LineBasicMaterial({
+            color: 0x06b6d4,
+            transparent: true,
+            opacity: 0.4,
+          });
+          const line = new THREE.Line(geo, mat);
+          this.scene.add(line);
+          this.lines.push(line);
+        }
+      }
+    }
+  }
+
+  update(solver, time) {
+    if (time - this.lastRefresh > this.refreshInterval) {
+      this.refresh(solver);
+      this.lastRefresh = time;
+    }
+  }
+
+  setVisible(v) {
+    for (const l of this.lines) l.visible = v;
+  }
+}
+
+// ============================================================
+// VELOCITY HEATMAP
+// ============================================================
+class VelocityHeatmap {
+  constructor(scene, n) {
+    this.n = n;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = n;
+    this.canvas.height = n;
+    this.ctx = this.canvas.getContext('2d');
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+
+    const geo = new THREE.PlaneGeometry(SIM_SCALE, SIM_SCALE);
+    const mat = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.position.y = 0.02;
+    scene.add(this.mesh);
+  }
+
+  update(solver) {
+    const n = this.n;
+    const imgData = this.ctx.createImageData(n, n);
+    let maxSpeed = 0.01;
+
+    // Find max speed for normalization
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        const idx = solver.IX(i, j);
+        const s = Math.sqrt(solver.u[idx] ** 2 + solver.v[idx] ** 2);
+        if (s > maxSpeed) maxSpeed = s;
+      }
+    }
+
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const idx = solver.IX(i + 1, j + 1);
+        const s = Math.sqrt(solver.u[idx] ** 2 + solver.v[idx] ** 2);
+        const t = Math.min(s / maxSpeed, 1);
+
+        let r, g, b;
+        if (t < 0.25) {
+          const s2 = t / 0.25;
+          r = 0; g = s2 * 128; b = 255;
+        } else if (t < 0.5) {
+          const s2 = (t - 0.25) / 0.25;
+          r = 0; g = 128 + s2 * 127; b = 255 * (1 - s2);
+        } else if (t < 0.75) {
+          const s2 = (t - 0.5) / 0.25;
+          r = s2 * 255; g = 255; b = 0;
+        } else {
+          const s2 = (t - 0.75) / 0.25;
+          r = 255; g = 255 * (1 - s2); b = 0;
+        }
+
+        const pi = (i + (n - 1 - j) * n) * 4;
+        imgData.data[pi] = r;
+        imgData.data[pi + 1] = g;
+        imgData.data[pi + 2] = b;
+        imgData.data[pi + 3] = solver.solid[idx] ? 40 : 180;
+      }
+    }
+    this.ctx.putImageData(imgData, 0, 0);
+    this.texture.needsUpdate = true;
+  }
+
+  setVisible(v) { this.mesh.visible = v; }
+}
+
+// ============================================================
+// PRESSURE HEATMAP
+// ============================================================
+class PressureHeatmap {
+  constructor(scene, n) {
+    this.n = n;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = n;
+    this.canvas.height = n;
+    this.ctx = this.canvas.getContext('2d');
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+
+    const geo = new THREE.PlaneGeometry(SIM_SCALE, SIM_SCALE);
+    const mat = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.rotation.x = -Math.PI / 2;
+    this.mesh.position.y = 0.03;
+    scene.add(this.mesh);
+  }
+
+  update(solver) {
+    const n = this.n;
+    const imgData = this.ctx.createImageData(n, n);
+    let maxP = 0.01;
+
+    for (let j = 1; j <= n; j++) {
+      for (let i = 1; i <= n; i++) {
+        const p = Math.abs(solver.p[solver.IX(i, j)]);
+        if (p > maxP) maxP = p;
+      }
+    }
+
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const idx = solver.IX(i + 1, j + 1);
+        const pVal = solver.p[idx];
+        const t = pVal / maxP; // -1 to 1
+
+        let r, g, b;
+        if (t < 0) {
+          // Low pressure: blue
+          const s = Math.min(-t, 1);
+          r = 50 * (1 - s);
+          g = 100 * (1 - s);
+          b = 200 + 55 * s;
+        } else {
+          // High pressure: red
+          const s = Math.min(t, 1);
+          r = 200 + 55 * s;
+          g = 100 * (1 - s);
+          b = 50 * (1 - s);
+        }
+
+        const pi = (i + (n - 1 - j) * n) * 4;
+        imgData.data[pi] = r;
+        imgData.data[pi + 1] = g;
+        imgData.data[pi + 2] = b;
+        imgData.data[pi + 3] = solver.solid[idx] ? 40 : 180;
+      }
+    }
+    this.ctx.putImageData(imgData, 0, 0);
+    this.texture.needsUpdate = true;
+  }
+
+  setVisible(v) { this.mesh.visible = v; }
+}
+
+// ============================================================
+// VISUALIZATION INSTANCES
+// ============================================================
+let particleStream, streamlines, velocityHeatmap, pressureHeatmap;
+
+function initVisualizations() {
+  particleStream = new ParticleStream(scene, 1000);
+  streamlines = new Streamlines(scene);
+  velocityHeatmap = new VelocityHeatmap(scene, N);
+  pressureHeatmap = new PressureHeatmap(scene, N);
+  pressureHeatmap.setVisible(false);
+}
+
+// ============================================================
+// SIMULATION CONTROL
+// ============================================================
+function toggleSim() {
+  simRunning = !simRunning;
+  document.getElementById('btn-playpause').textContent = simRunning ? '⏸ Pause' : '▶ Start';
+}
+window.toggleSim = toggleSim;
+
+function resetSim() {
+  fluid.reset();
+  simRunning = false;
+  document.getElementById('btn-playpause').textContent = '▶ Start';
+  particleStream.initParticles();
+  streamlines.refresh(fluid);
+}
+window.resetSim = resetSim;
+
+// ============================================================
+// SLIDER BINDINGS
+// ============================================================
+function initSliders() {
+  const sliders = [
+    { id: 'wind-azimuth', valId: 'wind-azimuth-val', suffix: '°' },
+    { id: 'wind-elevation', valId: 'wind-elevation-val', suffix: '°' },
+    { id: 'wind-speed', valId: 'wind-speed-val', suffix: '' },
+  ];
+  sliders.forEach(s => {
+    const el = document.getElementById(s.id);
+    const valEl = document.getElementById(s.valId);
+    el.addEventListener('input', () => {
+      valEl.textContent = el.value + s.suffix;
+      updateWindArrow();
+    });
+  });
+}
+
+// ============================================================
+// FPS COUNTER
+// ============================================================
+let fpsFrames = 0, fpsTime = performance.now();
+function updateFPS() {
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsTime > 500) {
+    const fps = Math.round(fpsFrames / ((now - fpsTime) / 1000));
+    document.getElementById('fps').textContent = fps + ' FPS';
+    fpsFrames = 0;
+    fpsTime = now;
+  }
+}
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+function animate() {
+  requestAnimationFrame(animate);
+
+  orbitControls.update();
+  updateFPS();
+  frameCount++;
+
+  if (simRunning) {
+    // Update solids from objects
+    fluid.updateSolids(objects);
+
+    // Get wind
+    const wind = getWindVector();
+    fluid.step(wind.u, wind.v);
+  }
+
+  // Update visualizations
+  const vizParticles = document.getElementById('viz-particles').checked;
+  const vizStreamlines = document.getElementById('viz-streamlines').checked;
+  const vizVelocity = document.getElementById('viz-velocity').checked;
+  const vizPressure = document.getElementById('viz-pressure').checked;
+
+  particleStream.setVisible(vizParticles);
+  if (vizParticles) {
+    const count = parseInt(document.getElementById('particle-count').value) || 1000;
+    particleStream.setCount(count);
+    particleStream.update(fluid);
+  }
+
+  streamlines.setVisible(vizStreamlines);
+  if (vizStreamlines) {
+    streamlines.update(fluid, performance.now());
+  }
+
+  velocityHeatmap.setVisible(vizVelocity);
+  if (vizVelocity && frameCount % 4 === 0) {
+    velocityHeatmap.update(fluid);
+  }
+
+  pressureHeatmap.setVisible(vizPressure);
+  if (vizPressure && frameCount % 4 === 0) {
+    pressureHeatmap.update(fluid);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+initThree();
+createWindArrow();
+initVisualizations();
+initSliders();
+refreshObjectList();
+animate();
+
+</script>
+</body>
+</html>
