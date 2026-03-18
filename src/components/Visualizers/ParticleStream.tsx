@@ -36,21 +36,29 @@ export function ParticleStream() {
     const worldSize = N * cs;
     const hw = worldSize / 2;
     const pos = posRef.current;
+    const solid = fieldData.solid;
 
     for (let p = 0; p < particleCount; p++) {
       let px = pos[p * 3];
       let py = pos[p * 3 + 1];
       let pz = pos[p * 3 + 2];
 
-      // Grid coordinates
+      // Grid coordinates (1-based for solver internal indexing)
       const gi = Math.floor((px + hw) / cs);
       const gj = Math.floor((pz + hw) / cs);
 
       let u = 0, v = 0;
+      let inSolid = false;
       if (gi >= 0 && gi < N && gj >= 0 && gj < N) {
         const idx = gj * N + gi;
         u = fieldData.u[idx];
         v = fieldData.v[idx];
+        // Check solid mask (solid uses (N+2) indexing, offset by 1)
+        if (solid) {
+          const si = gi + 1;
+          const sj = gj + 1;
+          inSolid = solid[si + (N + 2) * sj] === 1;
+        }
       }
 
       const speed = Math.sqrt(u * u + v * v);
@@ -58,8 +66,11 @@ export function ParticleStream() {
       px += u * dt;
       pz += v * dt;
 
-      // Respawn if out of bounds
-      if (px < -hw || px > hw || pz < -hw || pz > hw) {
+      // Respawn if out of bounds OR stuck inside a solid object
+      const outOfBounds = px < -hw || px > hw || pz < -hw || pz > hw;
+      const stuckInSolid = inSolid || (speed < 0.05 && Math.random() < 0.02);
+      if (outOfBounds || stuckInSolid) {
+        // Respawn at windward side
         px = -hw + Math.random() * 2;
         py = Math.random() * 3 + 0.1;
         pz = Math.random() * worldSize - hw;

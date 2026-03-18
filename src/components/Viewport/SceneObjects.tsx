@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import * as THREE from 'three';
 import { TransformControls } from '@react-three/drei';
 import { useObjectStore } from '../../store/objectStore';
@@ -21,93 +21,76 @@ function ShapeGeometry({ shape }: { shape: ShapeType }) {
 }
 
 function SceneObjectMesh({ obj }: { obj: SceneObject }) {
-  const meshRef = useRef<THREE.Mesh>(null);
+  // Use callback ref so TransformControls re-renders when mesh mounts
+  const [mesh, setMesh] = useState<THREE.Mesh | null>(null);
+  const draggingRef = useRef(false);
   const { handleClick } = useObjectSelection();
   const selectedId = useObjectStore((s) => s.selectedId);
+  const transformMode = useObjectStore((s) => s.transformMode);
+  const updateObject = useObjectStore((s) => s.updateObject);
+  const pushUndo = useObjectStore((s) => s.pushUndo);
   const isSelected = selectedId === obj.id;
+
+  // Sync mesh position from store when NOT dragging (to handle undo/redo/input changes)
+  useEffect(() => {
+    if (!mesh || draggingRef.current) return;
+    mesh.position.set(...obj.position);
+    mesh.rotation.set(...obj.rotation);
+    mesh.scale.set(...obj.scale);
+  }, [mesh, obj.position, obj.rotation, obj.scale]);
+
+  const handleChange = useCallback(() => {
+    if (!mesh || !draggingRef.current) return;
+    updateObject(obj.id, {
+      position: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rotation: [mesh.rotation.x, mesh.rotation.y, mesh.rotation.z],
+      scale: [mesh.scale.x, mesh.scale.y, mesh.scale.z],
+    });
+  }, [mesh, obj.id, updateObject]);
+
+  const handleMouseDown = useCallback(() => {
+    draggingRef.current = true;
+    pushUndo();
+  }, [pushUndo]);
+
+  const handleMouseUp = useCallback(() => {
+    draggingRef.current = false;
+  }, []);
 
   if (!obj.visible) return null;
 
   return (
-    <mesh
-      ref={meshRef}
-      position={obj.position}
-      rotation={obj.rotation}
-      scale={obj.scale}
-      onClick={(e) => handleClick(obj.id, e)}
-    >
-      <ShapeGeometry shape={obj.shape} />
-      <meshStandardMaterial
-        color={obj.color}
-        roughness={obj.roughness}
-        metalness={0.1}
-        transparent
-        opacity={0.85}
-      />
-      {isSelected && (
-        <lineSegments>
-          <edgesGeometry args={[new THREE.BoxGeometry(1.05, 1.05, 1.05)]} />
-          <lineBasicMaterial color="#38bdf8" linewidth={2} />
-        </lineSegments>
+    <>
+      <mesh
+        ref={setMesh}
+        onClick={(e) => handleClick(obj.id, e)}
+      >
+        <ShapeGeometry shape={obj.shape} />
+        <meshStandardMaterial
+          color={obj.color}
+          roughness={obj.roughness}
+          metalness={0.1}
+          transparent
+          opacity={0.85}
+        />
+        {isSelected && (
+          <lineSegments>
+            <edgesGeometry args={[new THREE.BoxGeometry(1.05, 1.05, 1.05)]} />
+            <lineBasicMaterial color="#38bdf8" linewidth={2} />
+          </lineSegments>
+        )}
+      </mesh>
+      {isSelected && !obj.locked && mesh && (
+        <TransformControls
+          object={mesh}
+          mode={transformMode}
+          size={0.7}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          onChange={handleChange}
+        />
       )}
-    </mesh>
-  );
-}
-
-function SelectedTransformControls() {
-  const selectedId = useObjectStore((s) => s.selectedId);
-  const objects = useObjectStore((s) => s.objects);
-  const transformMode = useObjectStore((s) => s.transformMode);
-  const updateObject = useObjectStore((s) => s.updateObject);
-  const pushUndo = useObjectStore((s) => s.pushUndo);
-  const controlsRef = useRef<any>(null);
-
-  const selected = objects.find((o) => o.id === selectedId);
-
-  useEffect(() => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-
-    let dragging = false;
-    const onStart = () => {
-      dragging = true;
-      pushUndo();
-    };
-    const onChange = () => {
-      if (!dragging || !selected) return;
-      const obj = controls.object;
-      if (!obj) return;
-      updateObject(selected.id, {
-        position: [obj.position.x, obj.position.y, obj.position.z],
-        rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
-        scale: [obj.scale.x, obj.scale.y, obj.scale.z],
-      });
-    };
-    const onEnd = () => {
-      dragging = false;
-    };
-
-    controls.addEventListener('mouseDown', onStart);
-    controls.addEventListener('change', onChange);
-    controls.addEventListener('mouseUp', onEnd);
-    return () => {
-      controls.removeEventListener('mouseDown', onStart);
-      controls.removeEventListener('change', onChange);
-      controls.removeEventListener('mouseUp', onEnd);
-    };
-  }, [selected, updateObject, pushUndo]);
-
-  if (!selected || selected.locked) return null;
-
-  return (
-    <TransformControls
-      ref={controlsRef}
-      mode={transformMode}
-      position={selected.position}
-      rotation={selected.rotation}
-      scale={selected.scale}
-      size={0.7}
-    />
+    </>
   );
 }
 
@@ -120,7 +103,6 @@ export function SceneObjects() {
       {objects.map((obj) => (
         <SceneObjectMesh key={obj.id} obj={obj} />
       ))}
-      <SelectedTransformControls />
     </group>
   );
 }

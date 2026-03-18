@@ -14,6 +14,34 @@ import { useFluidSolver } from '../../hooks/useFluidSolver';
 import { useAnimationLoop } from '../../hooks/useAnimationLoop';
 import { CameraController, setCameraView } from './CameraController';
 
+function SimControls() {
+  const running = useSimulatorStore((s) => s.simulation.running);
+  const setSimulation = useSimulatorStore((s) => s.setSimulation);
+  const resetSimulation = useSimulatorStore((s) => s.resetSimulation);
+
+  return (
+    <div className="absolute top-10 right-3 md:top-3 flex gap-2 z-10">
+      <button
+        onClick={() => setSimulation({ running: !running })}
+        className={`px-3 py-1.5 rounded text-sm font-semibold transition-colors border ${
+          running
+            ? 'bg-amber-500/20 border-amber-500 text-amber-400 hover:bg-amber-500/30'
+            : 'bg-emerald-500/20 border-emerald-500 text-emerald-400 hover:bg-emerald-500/30'
+        }`}
+      >
+        {running ? '⏸' : '▶'}
+      </button>
+      <button
+        onClick={resetSimulation}
+        className="px-3 py-1.5 rounded text-sm font-semibold transition-colors border bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30"
+        title="Stop & Reset"
+      >
+        ⏹
+      </button>
+    </div>
+  );
+}
+
 function SolverRunner() {
   const { stepSolver } = useFluidSolver();
   const running = useSimulatorStore((s) => s.simulation.running);
@@ -57,6 +85,7 @@ export function Viewport() {
         <SolverRunner />
         <CameraController />
       </Canvas>
+      <SimControls />
       <div className="absolute bottom-3 left-3 flex gap-1">
         {(['reset', 'top', 'front', 'side'] as const).map((view) => (
           <button

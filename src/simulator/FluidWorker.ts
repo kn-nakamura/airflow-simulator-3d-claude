@@ -17,9 +17,10 @@ self.onmessage = (e: MessageEvent<SolverMessage>) => {
     }
     case 'updateWind': {
       if (!solver || !msg.wind) break;
+      // azimuth=0 → wind flows from left (West) to right (East), positive u
       const az = (msg.wind.azimuth * Math.PI) / 180;
-      const wu = -Math.sin(az) * msg.wind.speed;
-      const wv = -Math.cos(az) * msg.wind.speed;
+      const wu = Math.cos(az) * msg.wind.speed;
+      const wv = Math.sin(az) * msg.wind.speed;
       solver.setWind(wu, wv, msg.wind.turbulenceIntensity, msg.wind.profile);
       break;
     }
@@ -28,21 +29,30 @@ self.onmessage = (e: MessageEvent<SolverMessage>) => {
       solver.setSolid(msg.solidMask);
       break;
     }
+    case 'reset': {
+      if (!solver) break;
+      solver.reset();
+      break;
+    }
     case 'step': {
       if (!solver) break;
       const dt = msg.dt ?? 0.016;
       solver.step(dt);
       const field = solver.getFieldData();
+      const solid = solver.solid;
+      const solidOut = new Uint8Array(solid.buffer.slice(0));
       const response = {
         type: 'fieldData' as const,
         u: field.u,
         v: field.v,
         pressure: field.pressure,
+        solid: solidOut,
       };
       (self as unknown as Worker).postMessage(response, [
         field.u.buffer,
         field.v.buffer,
         field.pressure.buffer,
+        solidOut.buffer,
       ]);
       break;
     }
